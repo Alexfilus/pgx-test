@@ -45,9 +45,6 @@ func main() {
 	if err != nil {
 		log.Fatalln(err)
 	}
-	if rowsV4.Err() != nil {
-		log.Fatalln(err)
-	}
 	defer rowsV4.Close()
 	for rowsV4.Next() {
 		var id int
@@ -57,12 +54,12 @@ func main() {
 		}
 		log.Println(id)
 	}
+	if rowsV4.Err() != nil {
+		log.Fatalln(rowsV4.Err())
+	}
 
 	rowsV5, err := dbV5.Query(ctx, query)
 	if err != nil {
-		log.Fatalln(err)
-	}
-	if rowsV5.Err() != nil {
 		log.Fatalln(err)
 	}
 	defer rowsV5.Close()
@@ -73,6 +70,9 @@ func main() {
 			log.Fatalln(err)
 		}
 		log.Println(id)
+	}
+	if rowsV5.Err() != nil {
+		log.Fatalln(rowsV5.Err())
 	}
 }
 
