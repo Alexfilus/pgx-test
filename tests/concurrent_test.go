@@ -63,9 +63,6 @@ func (s *TestSuite) Test_ConcurrentExec() {
 			durStr := strconv.Itoa(i) + " days"
 			durTime := time.Duration(i) * time.Second
 			s.T().Log(id, str, durStr, durTime)
-			// _, err = s.pgxPool.Exec(ctx, `
-			// insert into test (id, str, dur_str, dur_time)
-			// values ($1, $2, $3, $4)`, id, str, durStr, durTime)
 
 			_, err = s.pgxPool.Exec(ctx, `
 insert into test (id) values ($1)`, id)

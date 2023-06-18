@@ -246,18 +246,6 @@ from generate_series(1, 4) x`,
 			f: func(rows pgx.Rows, ttRes any) (any, error) {
 				return pgx.CollectRows[ComplexStruct](rows, pgx.RowToStructByPos[ComplexStruct])
 			},
-			// f: func(rows pgx.Rows, ttRes any) (any, error) {
-			// 	var res []ComplexStruct
-			// 	for rows.Next() {
-			// 		var item ComplexStruct
-			// 		err := rows.Scan(&item.ID, &item.Email, &item.SimpleStruct, &item.Slice, &item.Numbers)
-			// 		if err != nil {
-			// 			return nil, err
-			// 		}
-			// 		res = append(res, item)
-			// 	}
-			// 	return res, nil
-			// },
 		},
 	}
 

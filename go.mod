@@ -5,7 +5,7 @@ go 1.20
 require (
 	github.com/gofrs/uuid v4.4.0+incompatible
 	github.com/jackc/pgx/v4 v4.17.2
-	github.com/jackc/pgx/v5 v5.4.0
+	github.com/jackc/pgx/v5 v5.4.1
 	github.com/ory/dockertest/v3 v3.10.0
 	github.com/stretchr/testify v1.8.1
 )
