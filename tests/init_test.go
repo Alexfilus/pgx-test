@@ -23,7 +23,7 @@ func TestPgx(t *testing.T) {
 	suite.Run(t, new(TestSuite))
 }
 
-func (s *TestSuite) SetupTest() {
+func (s *TestSuite) SetupSuite() {
 	dockerPool, err := dockertest.NewPool("")
 	if err != nil {
 		s.T().Fatalf("error creating testing env: %v", err)
@@ -68,10 +68,18 @@ func (s *TestSuite) SetupTest() {
 	s.dockerPool = dockerPool
 	s.postgresContainer = resource
 
+	_, err = s.pgxPool.Exec(ctx, `create table if not exists test (id int primary key, str text, dur_str interval, dur_time interval)`)
+	s.Require().NoError(err)
+
 }
 
-func (s *TestSuite) TearDownTest() {
+func (s *TestSuite) TearDownSuite() {
 	if err := s.dockerPool.Purge(s.postgresContainer); err != nil {
 		s.T().Fatalf("couldn't kill test postgresContainer container: %v", err)
 	}
+}
+
+func (s *TestSuite) TearDownTest() {
+	_, err := s.pgxPool.Exec(context.Background(), "truncate table test")
+	s.Require().NoError(err)
 }

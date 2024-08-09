@@ -45,12 +45,9 @@ func (s *TestSuite) Test_ConcurrentQuery() {
 
 func (s *TestSuite) Test_ConcurrentExec() {
 	ctx := context.Background()
-	_, err := s.pgxPool.Exec(ctx, `create table if not exists test (id int primary key, str text, dur_str interval, dur_time interval)`)
-	s.Require().NoError(err)
 
 	conn, err := s.pgxPool.Acquire(ctx)
 	s.Require().NoError(err)
-	s.T().Log(conn.Conn().TypeMap())
 	conn.Release()
 
 	wg := sync.WaitGroup{}
@@ -62,7 +59,6 @@ func (s *TestSuite) Test_ConcurrentExec() {
 			str := strconv.Itoa(i)
 			durStr := strconv.Itoa(i) + " days"
 			durTime := time.Duration(i) * time.Second
-			s.T().Log(id, str, durStr, durTime)
 
 			_, err = s.pgxPool.Exec(ctx, `
 insert into test (id) values ($1)`, id)
@@ -86,6 +82,5 @@ update test set dur_time = $2 where id = $1`, id, durTime)
 
 	conn, err = s.pgxPool.Acquire(ctx)
 	s.Require().NoError(err)
-	s.T().Log(conn.Conn().TypeMap())
 	conn.Release()
 }

@@ -12,6 +12,12 @@ type VerySimpleStruct struct {
 	Name string `json:"name" db:"name"`
 }
 
+type SimpleStructWithSlice struct {
+	ID    int64    `json:"id" db:"id"`
+	Name  string   `json:"name" db:"name"`
+	TxIDs []string `json:"tx_ids" db:"tx_ids"`
+}
+
 type SimpleStruct struct {
 	ID       int64   `json:"id" db:"id"`
 	Name     string  `json:"name" db:"name"`
@@ -245,6 +251,50 @@ from generate_series(1, 4) x`,
 			},
 			f: func(rows pgx.Rows, ttRes any) (any, error) {
 				return pgx.CollectRows[ComplexStruct](rows, pgx.RowToStructByPos[ComplexStruct])
+			},
+		},
+		{
+			name: "slice of structs with slice",
+			query: `
+select x as id, x::text as name, (select array_agg(t::text) from generate_series(0, x) t) as tx_ids
+from generate_series(-1, 3) x
+union all
+select 1984 as id, 'empty_array' as name, '{}'::text[] as tx_ids
+`,
+			result: []SimpleStructWithSlice{
+				{
+					ID:    -1,
+					Name:  "-1",
+					TxIDs: nil,
+				},
+				{
+					ID:    0,
+					Name:  "0",
+					TxIDs: []string{"0"},
+				},
+				{
+					ID:    1,
+					Name:  "1",
+					TxIDs: []string{"0", "1"},
+				},
+				{
+					ID:    2,
+					Name:  "2",
+					TxIDs: []string{"0", "1", "2"},
+				},
+				{
+					ID:    3,
+					Name:  "3",
+					TxIDs: []string{"0", "1", "2", "3"},
+				},
+				{
+					ID:    1984,
+					Name:  "empty_array",
+					TxIDs: []string{},
+				},
+			},
+			f: func(rows pgx.Rows, ttRes any) (any, error) {
+				return pgx.CollectRows[SimpleStructWithSlice](rows, pgx.RowToStructByName[SimpleStructWithSlice])
 			},
 		},
 	}

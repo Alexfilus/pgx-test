@@ -95,12 +95,15 @@ type Pool struct {
 
 	healthCheckChan chan struct{}
 
+	acquireTracer AcquireTracer
+	releaseTracer ReleaseTracer
+
 	closeOnce sync.Once
 	closeChan chan struct{}
 }
 
-// Config is the configuration struct for creating a pool. It must be created by ParseConfig and then it can be
-// modified. A manually initialized ConnConfig will cause ConnectConfig to panic.
+// Config is the configuration struct for creating a pool. It must be created by [ParseConfig] and then it can be
+// modified.
 type Config struct {
 	ConnConfig *pgx.ConnConfig
 
@@ -160,7 +163,7 @@ func (c *Config) Copy() *Config {
 // ConnString returns the connection string as parsed by pgxpool.ParseConfig into pgxpool.Config.
 func (c *Config) ConnString() string { return c.ConnConfig.ConnString() }
 
-// New creates a new Pool. See ParseConfig for information on connString format.
+// New creates a new Pool. See [ParseConfig] for information on connString format.
 func New(ctx context.Context, connString string) (*Pool, error) {
 	config, err := ParseConfig(connString)
 	if err != nil {
@@ -170,7 +173,7 @@ func New(ctx context.Context, connString string) (*Pool, error) {
 	return NewWithConfig(ctx, config)
 }
 
-// NewWithConfig creates a new Pool. config must have been created by ParseConfig.
+// NewWithConfig creates a new Pool. config must have been created by [ParseConfig].
 func NewWithConfig(ctx context.Context, config *Config) (*Pool, error) {
 	// Default values are set in ParseConfig. Enforce initial creation by ParseConfig rather than setting defaults from
 	// zero values.
@@ -195,10 +198,19 @@ func NewWithConfig(ctx context.Context, config *Config) (*Pool, error) {
 		closeChan:             make(chan struct{}),
 	}
 
+	if t, ok := config.ConnConfig.Tracer.(AcquireTracer); ok {
+		p.acquireTracer = t
+	}
+
+	if t, ok := config.ConnConfig.Tracer.(ReleaseTracer); ok {
+		p.releaseTracer = t
+	}
+
 	var err error
 	p.p, err = puddle.NewPool(
 		&puddle.Config[*connResource]{
 			Constructor: func(ctx context.Context) (*connResource, error) {
+				atomic.AddInt64(&p.newConnsCount, 1)
 				connConfig := p.config.ConnConfig.Copy()
 
 				// Connection will continue in background even if Acquire is canceled. Ensure that a connect won't hang forever.
@@ -266,7 +278,7 @@ func NewWithConfig(ctx context.Context, config *Config) (*Pool, error) {
 	return p, nil
 }
 
-// ParseConfig builds a Config from connString. It parses connString with the same behavior as pgx.ParseConfig with the
+// ParseConfig builds a Config from connString. It parses connString with the same behavior as [pgx.ParseConfig] with the
 // addition of the following variables:
 //
 //   - pool_max_conns: integer greater than 0
@@ -278,7 +290,7 @@ func NewWithConfig(ctx context.Context, config *Config) (*Pool, error) {
 //
 // See Config for definitions of these arguments.
 //
-//	# Example DSN
+//	# Example Keyword/Value
 //	user=jack password=secret host=pg.example.com port=5432 dbname=mydb sslmode=verify-ca pool_max_conns=10
 //
 //	# Example URL
@@ -475,8 +487,11 @@ func (p *Pool) createIdleResources(parentCtx context.Context, targetResources in
 
 	for i := 0; i < targetResources; i++ {
 		go func() {
-			atomic.AddInt64(&p.newConnsCount, 1)
 			err := p.p.CreateResource(ctx)
+			// Ignore ErrNotAvailable since it means that the pool has become full since we started creating resource.
+			if err == puddle.ErrNotAvailable {
+				err = nil
+			}
 			errs <- err
 		}()
 	}
@@ -494,7 +509,18 @@ func (p *Pool) createIdleResources(parentCtx context.Context, targetResources in
 }
 
 // Acquire returns a connection (*Conn) from the Pool
-func (p *Pool) Acquire(ctx context.Context) (*Conn, error) {
+func (p *Pool) Acquire(ctx context.Context) (c *Conn, err error) {
+	if p.acquireTracer != nil {
+		ctx = p.acquireTracer.TraceAcquireStart(ctx, p, TraceAcquireStartData{})
+		defer func() {
+			var conn *pgx.Conn
+			if c != nil {
+				conn = c.Conn()
+			}
+			p.acquireTracer.TraceAcquireEnd(ctx, p, TraceAcquireEndData{Conn: conn, Err: err})
+		}()
+	}
+
 	for {
 		res, err := p.p.Acquire(ctx)
 		if err != nil {
